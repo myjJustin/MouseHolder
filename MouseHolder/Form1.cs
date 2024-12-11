@@ -1,7 +1,13 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.IO;
+using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Windows.Forms;
+using IWshRuntimeLibrary;
+using Shell32;
+using File = System.IO.File;
+using Folder = Shell32.Folder;
 
 namespace MouseHolder
 {
@@ -20,10 +26,61 @@ namespace MouseHolder
         public Form1()
         {
             InitializeComponent();
+            checkAndSetLinkToExe();
             
             //set default HotKey
             _hook.KeyPressed += hook_KeyPressed;
             _hook.RegisterHotKey(MouseHolder.ModifierKeys.Control, Keys.H);
+        }
+        
+        // add application to start menu 
+        private void checkAndSetLinkToExe()
+        {
+            try
+            {
+                string currentFilePath   = Assembly.GetEntryAssembly().Location;
+                string appdata           = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+                string startMenuFilePath = appdata + @"\Microsoft\Windows\Start Menu\Programs\MouseHolder.lnk";
+
+                if (File.Exists(startMenuFilePath))
+                {
+                    if (GetShortcutTargetFile(startMenuFilePath) == currentFilePath)
+                    {
+                        return;
+                    }
+
+                    File.Delete(startMenuFilePath);
+                }
+
+                WshShell     shell    = new WshShell();
+                IWshShortcut shortcut = (IWshShortcut)shell.CreateShortcut(startMenuFilePath);
+
+                shortcut.TargetPath = Assembly.GetEntryAssembly().Location;
+                shortcut.Save();
+            }
+            catch (Exception e)
+            {
+                MessageBox.Show("Adding link to application failed","Error", MessageBoxButtons.OK,
+                                MessageBoxIcon.Error);
+            }
+        }
+        
+        // check if link is set to current executed application
+        private static string GetShortcutTargetFile(string shortcutFilename)
+        {
+            string pathOnly     = Path.GetDirectoryName(shortcutFilename);
+            string filenameOnly = Path.GetFileName(shortcutFilename);
+
+            Shell      shell      = new Shell();
+            Folder     folder     = shell.NameSpace(pathOnly);
+            FolderItem folderItem = folder.ParseName(filenameOnly);
+            if (folderItem != null)
+            {
+                ShellLinkObject link = (ShellLinkObject)folderItem.GetLink;
+                return link.Path;
+            }
+
+            return string.Empty;
         }
         
         //Used to change the HotKey
